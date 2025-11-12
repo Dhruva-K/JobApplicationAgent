@@ -460,3 +460,94 @@ class GraphMemory:
                 for record in result
             ]
 
+    def create_agent(self, agent_data: Dict[str, Any]) -> str:
+        agent_id = agent_data.get("agent_id", f"agent_{datetime.now().timestamp()}")
+        query = f"""
+        MERGE (a:{NodeType.AGENT} {{agent_id: $agent_id}})
+        SET a += $properties, a.last_run = $last_run
+        RETURN a.agent_id as agent_id
+        """
+        with self.driver.session(database=self.database) as session:
+            result = session.run(
+                query,
+                agent_id=agent_id,
+                properties={k: v for k, v in agent_data.items() if k != "agent_id"},
+                last_run=datetime.now().isoformat(),
+            )
+            return result.single()["agent_id"]
+
+    def update_agent_status(self, agent_id: str, status: str):
+        query = f"""
+        MATCH (a:{NodeType.AGENT} {{agent_id: $agent_id}})
+        SET a.status = $status, a.last_run = $last_run
+        """
+        with self.driver.session(database=self.database) as session:
+            session.run(
+                query,
+                agent_id=agent_id,
+                status=status,
+                last_run=datetime.now().isoformat(),
+            )
+
+    # ======== Resume Management ========
+    def create_resume(self, resume_data: Dict[str, Any]) -> str:
+        resume_id = resume_data.get("resume_id", f"resume_{datetime.now().timestamp()}")
+        query = f"""
+        MERGE (r:{NodeType.RESUME} {{resume_id: $resume_id}})
+        SET r += $properties, r.created_date = $created_date
+        RETURN r.resume_id as resume_id
+        """
+        with self.driver.session(database=self.database) as session:
+            result = session.run(
+                query,
+                resume_id=resume_id,
+                properties={k: v for k, v in resume_data.items() if k != "resume_id"},
+                created_date=datetime.now().isoformat(),
+            )
+            return result.single()["resume_id"]
+
+    def link_resume_to_job(self, resume_id: str, job_id: str):
+        query = f"""
+        MATCH (r:{NodeType.RESUME} {{resume_id: $resume_id}})
+        MATCH (j:{NodeType.JOB} {{job_id: $job_id}})
+        MERGE (r)-[:{RelationshipType.TAILORED_FOR} {{timestamp: $timestamp}}]->(j)
+        """
+        with self.driver.session(database=self.database) as session:
+            session.run(query, resume_id=resume_id, job_id=job_id, timestamp=datetime.now().isoformat())
+
+    # ======== Event / Notification Management ========
+    def create_event(self, event_data: Dict[str, Any]) -> str:
+        event_id = event_data.get("event_id", f"event_{datetime.now().timestamp()}")
+        query = f"""
+        MERGE (e:{NodeType.EVENT} {{event_id: $event_id}})
+        SET e += $properties, e.created_at = $created_at
+        RETURN e.event_id as event_id
+        """
+        with self.driver.session(database=self.database) as session:
+            result = session.run(
+                query,
+                event_id=event_id,
+                properties={k: v for k, v in event_data.items() if k != "event_id"},
+                created_at=datetime.now().isoformat(),
+            )
+            return result.single()["event_id"]
+
+    def link_event_to_user(self, event_id: str, user_id: str):
+        query = f"""
+        MATCH (e:{NodeType.EVENT} {{event_id: $event_id}})
+        MATCH (u:{NodeType.USER} {{user_id: $user_id}})
+        MERGE (u)-[:{RelationshipType.NEEDS_ACTION_ON} {{timestamp: $timestamp}}]->(e)
+        """
+        with self.driver.session(database=self.database) as session:
+            session.run(query, event_id=event_id, user_id=user_id, timestamp=datetime.now().isoformat())
+
+    def get_pending_events(self, user_id: str) -> List[Dict[str, Any]]:
+        query = f"""
+        MATCH (u:{NodeType.USER} {{user_id: $user_id}})-[:{RelationshipType.NEEDS_ACTION_ON}]->(e:{NodeType.EVENT})
+        WHERE e.status = 'pending'
+        RETURN e as event
+        ORDER BY e.created_at DESC
+        """
+        with self.driver.session(database=self.database) as session:
+            result = session.run(query, user_id=user_id)
+            return [dict(record["event"]) for record in result]

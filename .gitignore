@@ -61,3 +61,5 @@ extract_docx.ps1
 *.tmp
 *.temp
 
+config.yaml
+

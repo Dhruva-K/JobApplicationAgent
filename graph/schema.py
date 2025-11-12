@@ -8,15 +8,20 @@ from enum import Enum
 
 class NodeType:
     """Node types in the graph."""
+
     JOB = "Job"
     COMPANY = "Company"
     SKILL = "Skill"
     APPLICATION = "Application"
     USER = "User"
+    AGENT = "Agent"
+    RESUME = "Resume"
+    EVENT = "Event"
 
 
 class RelationshipType:
     """Relationship types in the graph."""
+
     REQUIRES_SKILL = "REQUIRES_SKILL"
     APPLIED_TO = "APPLIED_TO"
     WORKS_AT = "WORKS_AT"
@@ -24,10 +29,20 @@ class RelationshipType:
     MATCHES = "MATCHES"
     POSTED_BY = "POSTED_BY"
     LOCATED_IN = "LOCATED_IN"
+    MONITORED = "MONITORED"
+    PROCESSED = "PROCESSED"
+    FILED_APPLICATION = "FILED_APPLICATION"
+    TAILORED_FOR = "TAILORED_FOR"
+    USED_RESUME = "USED_RESUME"
+    COMMUNICATES_WITH = "COMMUNICATES_WITH"
+    GENERATED = "GENERATED"
+    TRIGGERED = "TRIGGERED"
+    NEEDS_ACTION_ON = "NEEDS_ACTION_ON"
 
 
 class ApplicationStatus(Enum):
     """Application status enumeration."""
+
     PENDING = "pending"
     SUBMITTED = "submitted"
     INTERVIEW = "interview"
@@ -37,7 +52,7 @@ class ApplicationStatus(Enum):
 
 class GraphSchema:
     """Defines the graph database schema and constraints."""
-    
+
     @staticmethod
     def get_node_properties(node_type: str) -> Dict[str, str]:
         """Get expected properties for a node type."""
@@ -80,9 +95,30 @@ class GraphSchema:
                 "experience_years": "integer",
                 "education_level": "string",
             },
+            NodeType.AGENT: {
+                "agent_id": "string",
+                "role": "string",  # JobWatcher, ResumeTailor, etc.
+                "status": "string",  # active, idle, error
+                "last_run": "string",
+            },
+            NodeType.RESUME: {
+                "resume_id": "string",
+                "user_id": "string",
+                "content": "string",
+                "template_version": "string",
+                "tailored_for_job_id": "string",
+                "created_date": "string",
+            },
+            NodeType.EVENT: {
+                "event_id": "string",
+                "type": "string",
+                "message": "string",
+                "created_at": "string",
+                "status": "string",
+            },
         }
         return properties.get(node_type, {})
-    
+
     @staticmethod
     def get_relationship_properties(rel_type: str) -> Dict[str, str]:
         """Get expected properties for a relationship type."""
@@ -100,7 +136,7 @@ class GraphSchema:
             },
         }
         return properties.get(rel_type, {})
-    
+
     @staticmethod
     def get_constraints() -> List[str]:
         """Get Cypher constraints to create."""
@@ -110,8 +146,11 @@ class GraphSchema:
             f"CREATE CONSTRAINT skill_id IF NOT EXISTS FOR (s:{NodeType.SKILL}) REQUIRE s.skill_id IS UNIQUE",
             f"CREATE CONSTRAINT application_id IF NOT EXISTS FOR (a:{NodeType.APPLICATION}) REQUIRE a.application_id IS UNIQUE",
             f"CREATE CONSTRAINT user_id IF NOT EXISTS FOR (u:{NodeType.USER}) REQUIRE u.user_id IS UNIQUE",
+            f"CREATE CONSTRAINT agent_id IF NOT EXISTS FOR (a:{NodeType.AGENT}) REQUIRE a.agent_id IS UNIQUE",
+            f"CREATE CONSTRAINT resume_id IF NOT EXISTS FOR (r:{NodeType.RESUME}) REQUIRE r.resume_id IS UNIQUE",
+            f"CREATE CONSTRAINT event_id IF NOT EXISTS FOR (e:{NodeType.EVENT}) REQUIRE e.event_id IS UNIQUE",
         ]
-    
+
     @staticmethod
     def get_indexes() -> List[str]:
         """Get Cypher indexes to create."""
@@ -119,5 +158,7 @@ class GraphSchema:
             f"CREATE INDEX job_title IF NOT EXISTS FOR (j:{NodeType.JOB}) ON (j.title)",
             f"CREATE INDEX company_name IF NOT EXISTS FOR (c:{NodeType.COMPANY}) ON (c.name)",
             f"CREATE INDEX skill_name IF NOT EXISTS FOR (s:{NodeType.SKILL}) ON (s.name)",
+            f"CREATE INDEX agent_role IF NOT EXISTS FOR (a:{NodeType.AGENT}) ON (a.role)",
+            f"CREATE INDEX resume_user_id IF NOT EXISTS FOR (r:{NodeType.RESUME}) ON (r.user_id)",
+            f"CREATE INDEX event_type IF NOT EXISTS FOR (e:{NodeType.EVENT}) ON (e.type)",
         ]
-
