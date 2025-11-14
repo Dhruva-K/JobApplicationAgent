@@ -94,6 +94,8 @@ class GraphSchema:
                 "email": "string",
                 "experience_years": "integer",
                 "education_level": "string",
+                "skills": "list[string]",
+                "preferences": "map[string]",
             },
             NodeType.AGENT: {
                 "agent_id": "string",

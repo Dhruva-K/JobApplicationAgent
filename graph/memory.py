@@ -20,10 +20,10 @@ logger = logging.getLogger(__name__)
 
 class GraphMemory:
     """Manages Neo4j graph database operations."""
-    
+
     def __init__(self, uri: str, user: str, password: str, database: str = "neo4j"):
         """Initialize Neo4j connection.
-        
+
         Args:
             uri: Neo4j connection URI (e.g., "bolt://localhost:7687")
             user: Neo4j username
@@ -33,11 +33,11 @@ class GraphMemory:
         self.driver = GraphDatabase.driver(uri, auth=(user, password))
         self.database = database
         self._initialize_schema()
-    
+
     def close(self):
         """Close the database connection."""
         self.driver.close()
-    
+
     def _initialize_schema(self):
         """Initialize database schema with constraints and indexes."""
         with self.driver.session(database=self.database) as session:
@@ -47,46 +47,46 @@ class GraphMemory:
                     session.run(constraint)
                 except Exception as e:
                     logger.warning(f"Failed to create constraint: {e}")
-            
+
             # Create indexes
             for index in GraphSchema.get_indexes():
                 try:
                     session.run(index)
                 except Exception as e:
                     logger.warning(f"Failed to create index: {e}")
-    
+
     # Job Operations
     def create_job(self, job_data: Dict[str, Any]) -> str:
         """Create a job node.
-        
+
         Args:
             job_data: Dictionary containing job information
-            
+
         Returns:
             job_id: The created job's ID
         """
         job_id = job_data.get("job_id", f"job_{datetime.now().timestamp()}")
-        
+
         query = f"""
         MERGE (j:{NodeType.JOB} {{job_id: $job_id}})
         SET j += $properties
         RETURN j.job_id as job_id
         """
-        
+
         with self.driver.session(database=self.database) as session:
             result = session.run(
                 query,
                 job_id=job_id,
-                properties={k: v for k, v in job_data.items() if k != "job_id"}
+                properties={k: v for k, v in job_data.items() if k != "job_id"},
             )
             return result.single()["job_id"]
-    
+
     def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
         """Retrieve a job by ID.
-        
+
         Args:
             job_id: Job identifier
-            
+
         Returns:
             Job data dictionary or None if not found
         """
@@ -94,19 +94,21 @@ class GraphMemory:
         MATCH (j:{NodeType.JOB} {{job_id: $job_id}})
         RETURN j as job
         """
-        
+
         with self.driver.session(database=self.database) as session:
             result = session.run(query, job_id=job_id)
             record = result.single()
             return dict(record["job"]) if record else None
-    
-    def search_jobs(self, filters: Optional[Dict[str, Any]] = None, limit: int = 50) -> List[Dict[str, Any]]:
+
+    def search_jobs(
+        self, filters: Optional[Dict[str, Any]] = None, limit: int = 50
+    ) -> List[Dict[str, Any]]:
         """Search for jobs with optional filters.
-        
+
         Args:
             filters: Dictionary of filter criteria
             limit: Maximum number of results
-            
+
         Returns:
             List of job dictionaries
         """
@@ -115,7 +117,7 @@ class GraphMemory:
         WHERE 1=1
         """
         params = {"limit": limit}
-        
+
         if filters:
             if "title" in filters:
                 query += " AND j.title CONTAINS $title"
@@ -123,42 +125,44 @@ class GraphMemory:
             if "location" in filters:
                 query += " AND j.location CONTAINS $location"
                 params["location"] = filters["location"]
-        
+
         query += " RETURN j as job LIMIT $limit"
-        
+
         with self.driver.session(database=self.database) as session:
             result = session.run(query, **params)
             return [dict(record["job"]) for record in result]
-    
+
     # Company Operations
     def create_company(self, company_data: Dict[str, Any]) -> str:
         """Create a company node.
-        
+
         Args:
             company_data: Dictionary containing company information
-            
+
         Returns:
             company_id: The created company's ID
         """
-        company_id = company_data.get("company_id", f"company_{datetime.now().timestamp()}")
-        
+        company_id = company_data.get(
+            "company_id", f"company_{datetime.now().timestamp()}"
+        )
+
         query = f"""
         MERGE (c:{NodeType.COMPANY} {{company_id: $company_id}})
         SET c += $properties
         RETURN c.company_id as company_id
         """
-        
+
         with self.driver.session(database=self.database) as session:
             result = session.run(
                 query,
                 company_id=company_id,
-                properties={k: v for k, v in company_data.items() if k != "company_id"}
+                properties={k: v for k, v in company_data.items() if k != "company_id"},
             )
             return result.single()["company_id"]
-    
+
     def link_job_to_company(self, job_id: str, company_id: str):
         """Create relationship between job and company.
-        
+
         Args:
             job_id: Job identifier
             company_id: Company identifier
@@ -168,41 +172,49 @@ class GraphMemory:
         MATCH (c:{NodeType.COMPANY} {{company_id: $company_id}})
         MERGE (j)-[:{RelationshipType.POSTED_BY}]->(c)
         """
-        
+
         with self.driver.session(database=self.database) as session:
             session.run(query, job_id=job_id, company_id=company_id)
-    
+
     # Skill Operations
     def create_skill(self, skill_data: Dict[str, Any]) -> str:
         """Create a skill node.
-        
+
         Args:
             skill_data: Dictionary containing skill information
-            
+
         Returns:
             skill_id: The created skill's ID
         """
         skill_id = skill_data.get("skill_id", f"skill_{datetime.now().timestamp()}")
         skill_name = skill_data.get("name", "").lower().strip()
-        
+
         query = f"""
         MERGE (s:{NodeType.SKILL} {{skill_id: $skill_id}})
         SET s += $properties, s.name = $skill_name
         RETURN s.skill_id as skill_id
         """
-        
+
         with self.driver.session(database=self.database) as session:
             result = session.run(
                 query,
                 skill_id=skill_id,
                 skill_name=skill_name,
-                properties={k: v for k, v in skill_data.items() if k not in ["skill_id", "name"]}
+                properties={
+                    k: v for k, v in skill_data.items() if k not in ["skill_id", "name"]
+                },
             )
             return result.single()["skill_id"]
-    
-    def link_job_to_skill(self, job_id: str, skill_id: str, required_level: str = "intermediate", is_mandatory: bool = True):
+
+    def link_job_to_skill(
+        self,
+        job_id: str,
+        skill_id: str,
+        required_level: str = "intermediate",
+        is_mandatory: bool = True,
+    ):
         """Create relationship between job and required skill.
-        
+
         Args:
             job_id: Job identifier
             skill_id: Skill identifier
@@ -216,22 +228,22 @@ class GraphMemory:
         SET r.required_level = $required_level,
             r.is_mandatory = $is_mandatory
         """
-        
+
         with self.driver.session(database=self.database) as session:
             session.run(
                 query,
                 job_id=job_id,
                 skill_id=skill_id,
                 required_level=required_level,
-                is_mandatory=is_mandatory
+                is_mandatory=is_mandatory,
             )
-    
+
     def get_job_skills(self, job_id: str) -> List[Dict[str, Any]]:
         """Get all skills required for a job.
-        
+
         Args:
             job_id: Job identifier
-            
+
         Returns:
             List of skill dictionaries with relationship properties
         """
@@ -239,47 +251,77 @@ class GraphMemory:
         MATCH (j:{NodeType.JOB} {{job_id: $job_id}})-[r:{RelationshipType.REQUIRES_SKILL}]->(s:{NodeType.SKILL})
         RETURN s as skill, r.required_level as level, r.is_mandatory as mandatory
         """
-        
+
         with self.driver.session(database=self.database) as session:
             result = session.run(query, job_id=job_id)
             return [
                 {
                     **dict(record["skill"]),
                     "required_level": record["level"],
-                    "is_mandatory": record["mandatory"]
+                    "is_mandatory": record["mandatory"],
                 }
                 for record in result
             ]
-    
+
     # User Operations
     def create_user(self, user_data: Dict[str, Any]) -> str:
         """Create a user node.
-        
+
         Args:
             user_data: Dictionary containing user information
-            
+
         Returns:
             user_id: The created user's ID
         """
         user_id = user_data.get("user_id", f"user_{datetime.now().timestamp()}")
-        
+
         query = f"""
         MERGE (u:{NodeType.USER} {{user_id: $user_id}})
         SET u += $properties
         RETURN u.user_id as user_id
         """
-        
+
         with self.driver.session(database=self.database) as session:
             result = session.run(
                 query,
                 user_id=user_id,
-                properties={k: v for k, v in user_data.items() if k != "user_id"}
+                properties={k: v for k, v in user_data.items() if k != "user_id"},
             )
             return result.single()["user_id"]
-    
+
+    def update_user(self, user_id: str, updates: Dict[str, Any]) -> bool:
+        """Update an existing user node with new properties.
+
+        Args:
+            user_id: User identifier
+            updates: Dictionary containing properties to update
+
+        Returns:
+            bool: True if update successful, False otherwise
+        """
+        if not updates:
+            logger.warning(f"No updates provided for user {user_id}")
+            return False
+
+        query = f"""
+        MATCH (u:{NodeType.USER} {{user_id: $user_id}})
+        SET u += $updates
+        RETURN u.user_id as user_id
+        """
+
+        with self.driver.session(database=self.database) as session:
+            result = session.run(query, user_id=user_id, updates=updates)
+            record = result.single()
+            if record:
+                logger.info(f"Updated user {user_id} with {len(updates)} properties")
+                return True
+            else:
+                logger.warning(f"User {user_id} not found for update")
+                return False
+
     def link_user_to_skill(self, user_id: str, skill_id: str):
         """Create relationship between user and skill.
-        
+
         Args:
             user_id: User identifier
             skill_id: Skill identifier
@@ -289,16 +331,16 @@ class GraphMemory:
         MATCH (s:{NodeType.SKILL} {{skill_id: $skill_id}})
         MERGE (u)-[:{RelationshipType.HAS_SKILL}]->(s)
         """
-        
+
         with self.driver.session(database=self.database) as session:
             session.run(query, user_id=user_id, skill_id=skill_id)
-    
+
     def get_user_skills(self, user_id: str) -> List[Dict[str, Any]]:
         """Get all skills for a user.
-        
+
         Args:
             user_id: User identifier
-            
+
         Returns:
             List of skill dictionaries
         """
@@ -306,43 +348,44 @@ class GraphMemory:
         MATCH (u:{NodeType.USER} {{user_id: $user_id}})-[:{RelationshipType.HAS_SKILL}]->(s:{NodeType.SKILL})
         RETURN s as skill
         """
-        
+
         with self.driver.session(database=self.database) as session:
             result = session.run(query, user_id=user_id)
             return [dict(record["skill"]) for record in result]
-    
+
     # Application Operations
     def create_application(self, application_data: Dict[str, Any]) -> str:
         """Create an application node.
-        
+
         Args:
             application_data: Dictionary containing application information
-            
+
         Returns:
             application_id: The created application's ID
         """
         application_id = application_data.get(
-            "application_id",
-            f"app_{datetime.now().timestamp()}"
+            "application_id", f"app_{datetime.now().timestamp()}"
         )
-        
+
         query = f"""
         MERGE (a:{NodeType.APPLICATION} {{application_id: $application_id}})
         SET a += $properties
         RETURN a.application_id as application_id
         """
-        
+
         with self.driver.session(database=self.database) as session:
             result = session.run(
                 query,
                 application_id=application_id,
-                properties={k: v for k, v in application_data.items() if k != "application_id"}
+                properties={
+                    k: v for k, v in application_data.items() if k != "application_id"
+                },
             )
             return result.single()["application_id"]
-    
+
     def link_application(self, user_id: str, job_id: str, application_id: str):
         """Link application to user and job.
-        
+
         Args:
             user_id: User identifier
             job_id: Job identifier
@@ -355,13 +398,15 @@ class GraphMemory:
         MERGE (u)-[:{RelationshipType.APPLIED_TO}]->(a)
         MERGE (a)-[:{RelationshipType.APPLIED_TO}]->(j)
         """
-        
+
         with self.driver.session(database=self.database) as session:
-            session.run(query, user_id=user_id, job_id=job_id, application_id=application_id)
-    
+            session.run(
+                query, user_id=user_id, job_id=job_id, application_id=application_id
+            )
+
     def update_application_status(self, application_id: str, status: ApplicationStatus):
         """Update application status.
-        
+
         Args:
             application_id: Application identifier
             status: New application status
@@ -371,21 +416,21 @@ class GraphMemory:
         SET a.status = $status,
             a.updated_date = $updated_date
         """
-        
+
         with self.driver.session(database=self.database) as session:
             session.run(
                 query,
                 application_id=application_id,
                 status=status.value,
-                updated_date=datetime.now().isoformat()
+                updated_date=datetime.now().isoformat(),
             )
-    
+
     def get_user_applications(self, user_id: str) -> List[Dict[str, Any]]:
         """Get all applications for a user.
-        
+
         Args:
             user_id: User identifier
-            
+
         Returns:
             List of application dictionaries with job information
         """
@@ -394,21 +439,18 @@ class GraphMemory:
         RETURN a as application, j as job
         ORDER BY a.applied_date DESC
         """
-        
+
         with self.driver.session(database=self.database) as session:
             result = session.run(query, user_id=user_id)
             return [
-                {
-                    **dict(record["application"]),
-                    "job": dict(record["job"])
-                }
+                {**dict(record["application"]), "job": dict(record["job"])}
                 for record in result
             ]
-    
+
     # Matching Operations
     def create_match(self, user_id: str, job_id: str, match_score: float):
         """Create a match relationship between user and job.
-        
+
         Args:
             user_id: User identifier
             job_id: Job identifier
@@ -421,24 +463,26 @@ class GraphMemory:
         SET r.match_score = $match_score,
             r.matched_date = $matched_date
         """
-        
+
         with self.driver.session(database=self.database) as session:
             session.run(
                 query,
                 user_id=user_id,
                 job_id=job_id,
                 match_score=match_score,
-                matched_date=datetime.now().isoformat()
+                matched_date=datetime.now().isoformat(),
             )
-    
-    def get_user_matches(self, user_id: str, min_score: float = 0.0, limit: int = 20) -> List[Dict[str, Any]]:
+
+    def get_user_matches(
+        self, user_id: str, min_score: float = 0.0, limit: int = 20
+    ) -> List[Dict[str, Any]]:
         """Get job matches for a user.
-        
+
         Args:
             user_id: User identifier
             min_score: Minimum match score
             limit: Maximum number of results
-            
+
         Returns:
             List of job dictionaries with match scores
         """
@@ -449,14 +493,13 @@ class GraphMemory:
         ORDER BY r.match_score DESC
         LIMIT $limit
         """
-        
+
         with self.driver.session(database=self.database) as session:
-            result = session.run(query, user_id=user_id, min_score=min_score, limit=limit)
+            result = session.run(
+                query, user_id=user_id, min_score=min_score, limit=limit
+            )
             return [
-                {
-                    **dict(record["job"]),
-                    "match_score": record["score"]
-                }
+                {**dict(record["job"]), "match_score": record["score"]}
                 for record in result
             ]
 
@@ -513,7 +556,12 @@ class GraphMemory:
         MERGE (r)-[:{RelationshipType.TAILORED_FOR} {{timestamp: $timestamp}}]->(j)
         """
         with self.driver.session(database=self.database) as session:
-            session.run(query, resume_id=resume_id, job_id=job_id, timestamp=datetime.now().isoformat())
+            session.run(
+                query,
+                resume_id=resume_id,
+                job_id=job_id,
+                timestamp=datetime.now().isoformat(),
+            )
 
     # ======== Event / Notification Management ========
     def create_event(self, event_data: Dict[str, Any]) -> str:
@@ -539,7 +587,12 @@ class GraphMemory:
         MERGE (u)-[:{RelationshipType.NEEDS_ACTION_ON} {{timestamp: $timestamp}}]->(e)
         """
         with self.driver.session(database=self.database) as session:
-            session.run(query, event_id=event_id, user_id=user_id, timestamp=datetime.now().isoformat())
+            session.run(
+                query,
+                event_id=event_id,
+                user_id=user_id,
+                timestamp=datetime.now().isoformat(),
+            )
 
     def get_pending_events(self, user_id: str) -> List[Dict[str, Any]]:
         query = f"""
