@@ -89,7 +89,11 @@ class Config:
         }
     
     def get_llm_config(self) -> Dict[str, Any]:
-        """Get LLM configuration."""
+        """Get LLM configuration.
+        
+        Returns LLM configuration with defaults optimized for Groq.
+        Supports providers: groq (default), ollama, vllm.
+        """
         return {
             "provider": self.get("llm.provider", "groq"),
             "model_name": self.get("llm.model_name", "llama-3.3-70b-versatile"),
