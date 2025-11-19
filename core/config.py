@@ -51,6 +51,8 @@ class Config:
             self.config.setdefault("llm", {})["model_name"] = os.getenv("LLM_MODEL_NAME")
         if os.getenv("LLM_BASE_URL"):
             self.config.setdefault("llm", {})["base_url"] = os.getenv("LLM_BASE_URL")
+        if os.getenv("GROQ_API_KEY"):
+            self.config.setdefault("llm", {})["api_key"] = os.getenv("GROQ_API_KEY")
         
         # Job APIs
         if os.getenv("JSEARCH_API_KEY"):
@@ -87,11 +89,16 @@ class Config:
         }
     
     def get_llm_config(self) -> Dict[str, Any]:
-        """Get LLM configuration."""
+        """Get LLM configuration.
+        
+        Returns LLM configuration with defaults optimized for Groq.
+        Supports providers: groq (default), ollama, vllm.
+        """
         return {
-            "provider": self.get("llm.provider", "ollama"),
-            "model_name": self.get("llm.model_name", "llama3:8b"),
+            "provider": self.get("llm.provider", "groq"),
+            "model_name": self.get("llm.model_name", "llama-3.3-70b-versatile"),
             "base_url": self.get("llm.base_url", "http://localhost:11434"),
+            "api_key": self.get("llm.api_key"),
             "temperature": self.get("llm.temperature", 0.7),
             "max_tokens": self.get("llm.max_tokens", 2048),
         }

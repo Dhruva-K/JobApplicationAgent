@@ -1,12 +1,12 @@
 # Job Application Agent with Graph-Based Memory
 
-A LangGraph-powered multi-agent system for automating job discovery, evaluation, and application preparation using Llama 3 8B and Neo4j graph database.
+A LangGraph-powered multi-agent system for automating job discovery, evaluation, and application preparation using powerful LLMs (Groq, Ollama, or vLLM) and Neo4j graph database.
 
 ## Features
 
 - **5 Specialized Agents**: Scout, Extractor, Matcher, Writer, and Tracker
 - **Graph-Based Memory**: Neo4j database for relational knowledge storage
-- **Open-Source LLM**: Llama 3 8B via Ollama for local inference
+- **Flexible LLM Options**: Groq cloud API (recommended), Ollama for local inference, or vLLM
 - **Intelligent Matching**: Skill-based and semantic similarity matching
 - **Document Generation**: Automated resume and cover letter generation
 - **Application Tracking**: Comprehensive tracking of job applications
@@ -39,8 +39,11 @@ A LangGraph-powered multi-agent system for automating job discovery, evaluation,
 
 - Python 3.10+
 - Neo4j database (local or cloud)
-- Ollama installed with Llama 3 8B model
-- GPU (optional, for faster inference)
+- One of the following LLM options:
+  - **Groq API key** (recommended - fast, powerful, and free)
+  - Ollama installed with a model like Llama 3 8B
+  - vLLM server running
+- GPU (optional, for local inference with Ollama/vLLM)
 
 ## Installation
 
@@ -58,20 +61,46 @@ pip install -r requirements.txt
 3. Set up Neo4j:
    - Install Neo4j Desktop or use Neo4j Aura (cloud)
    - Create a new database
-   - Update `config.yaml` with your Neo4j credentials
+   - Update configuration with your Neo4j credentials (see step 5)
 
-4. Set up Ollama:
-```bash
-# Install Ollama (if not already installed)
-# Visit https://ollama.ai for installation instructions
+4. Set up your LLM provider:
 
-# Pull Llama 3 8B model
-ollama pull llama3:8b
-```
+   **Option A: Groq (Recommended - Fast, Powerful, Free)**
+   - Sign up for a free account at [https://console.groq.com](https://console.groq.com)
+   - Generate an API key from the dashboard
+   - The default model `llama-3.3-70b-versatile` is the best free option available
+   
+   **Option B: Ollama (Local Inference)**
+   ```bash
+   # Install Ollama (if not already installed)
+   # Visit https://ollama.ai for installation instructions
+   
+   # Pull Llama 3 8B model
+   ollama pull llama3:8b
+   ```
+   
+   **Option C: vLLM (High-Performance Local Inference)**
+   - Set up a vLLM server following their documentation
+   - Configure the base URL in your environment
 
 5. Configure the application:
    - Copy `.env.example` to `.env`
-   - Update configuration values in `config.yaml` or `.env`
+   - Update configuration values in `.env`:
+     ```bash
+     # For Groq (recommended)
+     LLM_PROVIDER=groq
+     LLM_MODEL_NAME=llama-3.3-70b-versatile
+     GROQ_API_KEY=your_api_key_here
+     
+     # For Ollama
+     # LLM_PROVIDER=ollama
+     # LLM_MODEL_NAME=llama3:8b
+     
+     # For vLLM
+     # LLM_PROVIDER=vllm
+     # LLM_MODEL_NAME=llama3-8b
+     ```
+   - Add your Neo4j credentials
    - Add your job API keys (JSearch, Remotive)
 
 ## Usage
@@ -116,11 +145,16 @@ JobApplicationAgent/
 
 ## Configuration
 
-Edit `config.yaml` to customize:
-- Neo4j connection settings
-- LLM model and parameters
-- Job API credentials
-- Application behavior
+Edit `.env` to customize:
+- **LLM Provider**: Choose between Groq (cloud), Ollama (local), or vLLM
+  - Groq: `llama-3.3-70b-versatile` (recommended - most powerful free model)
+  - Ollama: `llama3:8b` or other local models
+  - vLLM: Custom model deployment
+- **Neo4j**: Connection settings for graph database
+- **Job APIs**: Credentials for JSearch and Remotive APIs
+- **Application Behavior**: Temperature, max tokens, etc.
+
+You can also use a `config.yaml` file for additional customization.
 
 ## Development
 
@@ -149,6 +183,7 @@ pytest tests/
 
 - LangGraph for agent orchestration
 - Neo4j for graph database
+- Groq for fast cloud LLM inference
 - Ollama for local LLM inference
-- Llama 3 8B by Meta
+- Meta's Llama models
 
