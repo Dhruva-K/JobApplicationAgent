@@ -5,6 +5,8 @@ User Profile management system.
 import logging
 from typing import Dict, List, Optional, Any
 from datetime import datetime
+from pathlib import Path
+import os
 
 from graph.memory import GraphMemory
 
@@ -31,6 +33,7 @@ class UserProfile:
         experience_years: int = 0,
         education_level: str = "",
         preferences: Optional[Dict[str, Any]] = None,
+        resume_text: Optional[str] = None,
     ) -> str:
         """Create a new user profile.
 
@@ -42,6 +45,7 @@ class UserProfile:
             experience_years: Years of experience
             education_level: Education level
             preferences: Optional preferences dictionary
+            resume_text: Optional resume text content
 
         Returns:
             Created user ID
@@ -54,6 +58,9 @@ class UserProfile:
                 "experience_years": experience_years,
                 "education_level": education_level,
             }
+
+            if resume_text:
+                user_data["resume_text"] = resume_text
 
             if preferences:
                 user_data.update(preferences)
@@ -350,6 +357,109 @@ class UserProfile:
             logger.warning(f"Error creating skill: {e}")
             return skill_id
 
+    def upload_resume(self, user_id: str, resume_path: str) -> bool:
+        """Parse and store resume content from file.
+
+        Args:
+            user_id: User identifier
+            resume_path: Path to resume file (PDF or DOCX)
+
+        Returns:
+            True if successful
+        """
+        try:
+            resume_text = self._parse_resume(resume_path)
+            if not resume_text:
+                logger.error(f"Failed to parse resume from {resume_path}")
+                return False
+
+            # Update user profile with resume text
+            return self.graph_memory.update_user(user_id, {"resume_text": resume_text})
+
+        except Exception as e:
+            logger.error(f"Error uploading resume: {e}")
+            return False
+
+    def _parse_resume(self, file_path: str) -> Optional[str]:
+        """Parse resume text from PDF or DOCX file.
+
+        Args:
+            file_path: Path to resume file
+
+        Returns:
+            Extracted text or None if failed
+        """
+        try:
+            path = Path(file_path)
+            if not path.exists():
+                logger.error(f"Resume file not found: {file_path}")
+                return None
+
+            extension = path.suffix.lower()
+
+            if extension == ".pdf":
+                return self._parse_pdf(file_path)
+            elif extension in [".docx", ".doc"]:
+                return self._parse_docx(file_path)
+            else:
+                logger.error(f"Unsupported file format: {extension}")
+                return None
+
+        except Exception as e:
+            logger.error(f"Error parsing resume: {e}")
+            return None
+
+    def _parse_pdf(self, file_path: str) -> Optional[str]:
+        """Extract text from PDF file."""
+        try:
+            import PyPDF2
+
+            text = []
+            with open(file_path, "rb") as file:
+                reader = PyPDF2.PdfReader(file)
+                for page in reader.pages:
+                    text.append(page.extract_text())
+
+            return "\\n".join(text).strip()
+
+        except ImportError:
+            logger.error("PyPDF2 not installed. Run: pip install PyPDF2")
+            return None
+        except Exception as e:
+            logger.error(f"Error parsing PDF: {e}")
+            return None
+
+    def _parse_docx(self, file_path: str) -> Optional[str]:
+        """Extract text from DOCX file."""
+        try:
+            import docx
+
+            doc = docx.Document(file_path)
+            text = []
+            for paragraph in doc.paragraphs:
+                text.append(paragraph.text)
+
+            return "\\n".join(text).strip()
+
+        except ImportError:
+            logger.error("python-docx not installed. Run: pip install python-docx")
+            return None
+        except Exception as e:
+            logger.error(f"Error parsing DOCX: {e}")
+            return None
+
+    def get_resume(self, user_id: str) -> Optional[str]:
+        """Get resume text for a user.
+
+        Args:
+            user_id: User identifier
+
+        Returns:
+            Resume text or None if not available
+        """
+        profile = self.get_profile(user_id)
+        return profile.get("resume_text") if profile else None
+
     def get_profile_summary(self, user_id: str) -> Dict[str, Any]:
         """Get a summary of user profile.
 
@@ -497,6 +607,22 @@ class UserProfile:
         ).strip()
         exclude_companies = [c.strip() for c in exclude_input.split(",") if c.strip()]
 
+        # Resume upload
+        print("\n" + "-" * 60)
+        print("RESUME (OPTIONAL)")
+        print("-" * 60 + "\n")
+        resume_path = input(
+            "Path to resume file (PDF or DOCX, or Enter to skip): "
+        ).strip()
+
+        resume_text = None
+        if resume_path:
+            resume_text = user_profile._parse_resume(resume_path)
+            if resume_text:
+                print("✅ Resume parsed successfully!")
+            else:
+                print("⚠️  Failed to parse resume. Continuing without it.")
+
         # Create profile
         print("\n" + "=" * 60)
         print("CREATING PROFILE...")
@@ -519,6 +645,7 @@ class UserProfile:
                 experience_years=exp_years,
                 education_level=education,
                 preferences=preferences,
+                resume_text=resume_text,
             )
 
             print("\n✅ Profile created successfully!")
