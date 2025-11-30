@@ -96,6 +96,7 @@ class GraphSchema:
                 "education_level": "string",
                 "skills": "list[string]",
                 "preferences": "map[string]",
+                "resume_text": "string",  # Full resume text content
             },
             NodeType.AGENT: {
                 "agent_id": "string",

@@ -55,6 +55,39 @@ class GraphMemory:
                 except Exception as e:
                     logger.warning(f"Failed to create index: {e}")
 
+    # Utility Query
+    def query(
+        self, query: str, params: Optional[Dict[str, Any]] = None
+    ) -> List[Dict[str, Any]]:
+        """Run a raw Cypher query and return records as dicts.
+
+        Args:
+            query: Cypher query string
+            params: Optional parameters dictionary
+
+        Returns:
+            List of records (each record is a dict of returned aliases)
+        """
+        with self.driver.session(database=self.database) as session:
+            result = session.run(query, **(params or {}))
+            # Use record.values() and record.keys() to properly convert Neo4j objects
+            records = []
+            for record in result:
+                record_dict = {}
+                for key in record.keys():
+                    value = record[key]
+                    # Convert Neo4j Node/Relationship objects to dicts
+                    if hasattr(value, "__class__") and value.__class__.__name__ in [
+                        "Node",
+                        "Relationship",
+                    ]:
+                        # For relationships, we want the properties dict
+                        record_dict[key] = dict(value) if value else {}
+                    else:
+                        record_dict[key] = value
+                records.append(record_dict)
+            return records
+
     # Job Operations
     def create_job(self, job_data: Dict[str, Any]) -> str:
         """Create a job node.
