@@ -571,6 +571,12 @@ class UserProfile:
         print("JOB SEARCH PREFERENCES")
         print("-" * 60 + "\n")
 
+        # Preferred job titles/roles
+        print("What job titles are you looking for? (comma-separated):")
+        print("Example: Software Engineer, Machine Learning Engineer, Data Scientist")
+        job_titles_input = input("Job titles: ").strip()
+        preferred_roles = [r.strip() for r in job_titles_input.split(",") if r.strip()]
+
         # Employment types
         print("Employment types (comma-separated):")
         print("Options: INTERN, FULLTIME, PARTTIME, CONTRACT")
@@ -632,6 +638,7 @@ class UserProfile:
             "employment_types": employment_types,
             "remote_only": remote_only,
             "preferred_locations": locations,
+            "preferred_roles": preferred_roles,
             "salary_min": salary_min,
             "exclude_companies": exclude_companies,
         }

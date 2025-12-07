@@ -111,22 +111,66 @@ class ScoutAgent(BaseAgent):
         }
 
         try:
-            response = requests.get(url, params=params, headers=headers, timeout=30)
-            response.raise_for_status()
-            data = response.json()
+            # Retry logic for timeouts
+            max_retries = 3
+            retry_count = 0
+            last_error = None
 
-            jobs = []
-            for job_data in data.get("data", [])[:max_results]:
-                normalized_job = self._normalize_jsearch_job(job_data)
-                if normalized_job:
-                    jobs.append(normalized_job)
+            while retry_count < max_retries:
+                try:
+                    # Increase timeout and add retries for 504 errors
+                    response = requests.get(
+                        url, params=params, headers=headers, timeout=60
+                    )
+                    response.raise_for_status()
+                    data = response.json()
 
-            logger.info(f"Retrieved {len(jobs)} jobs from JSearch")
-            return jobs
+                    jobs = []
+                    for job_data in data.get("data", [])[:max_results]:
+                        normalized_job = self._normalize_jsearch_job(job_data)
+                        if normalized_job:
+                            jobs.append(normalized_job)
+
+                    logger.info(f"Retrieved {len(jobs)} jobs from JSearch")
+                    return jobs
+
+                except requests.exceptions.Timeout as e:
+                    retry_count += 1
+                    last_error = e
+                    logger.warning(
+                        f"JSearch timeout (attempt {retry_count}/{max_retries}): {e}"
+                    )
+                    if retry_count < max_retries:
+                        import time
+
+                        time.sleep(2 * retry_count)  # Exponential backoff
+                        continue
+                    break
+
+                except requests.exceptions.HTTPError as e:
+                    # If 504 Gateway Timeout, retry
+                    if e.response.status_code == 504:
+                        retry_count += 1
+                        last_error = e
+                        logger.warning(
+                            f"JSearch 504 Gateway Timeout (attempt {retry_count}/{max_retries})"
+                        )
+                        if retry_count < max_retries:
+                            import time
+
+                            time.sleep(3 * retry_count)  # Exponential backoff
+                            continue
+                    raise  # Re-raise other HTTP errors
+
+            # All retries exhausted
+            logger.error(f"JSearch failed after {max_retries} attempts: {last_error}")
+            logger.info("Falling back to Remotive API...")
+            return self._search_remotive(keywords, None, employment_type, max_results)
 
         except requests.exceptions.RequestException as e:
             logger.error(f"Error fetching jobs from JSearch: {e}")
-            return []
+            logger.info("Falling back to Remotive API...")
+            return self._search_remotive(keywords, None, employment_type, max_results)
 
     def _search_remotive(
         self,
@@ -351,7 +395,7 @@ class ScoutAgent(BaseAgent):
     ):
         """
         Execute full job discovery + storage cycle.
-        
+
         Args:
             keywords: Job search keywords
             date_posted: Date filter for jobs
@@ -360,7 +404,7 @@ class ScoutAgent(BaseAgent):
             api_source: API source to use
         """
         self.update_status("active")
-        
+
         logger.info(
             f"[ScoutAgent] Searching jobs for keywords='{keywords}', source={api_source}"
         )
@@ -369,33 +413,62 @@ class ScoutAgent(BaseAgent):
         jobs = self.search_jobs(
             keywords, date_posted, employment_type, max_results, api_source
         )
-        
+
         if not jobs:
             logger.warning("[ScoutAgent] No jobs found from API.")
             self.update_status("idle")
             return
-        
+
         logger.info(f"[ScoutAgent] Fetched {len(jobs)} jobs from API")
-        
+
         # Store all jobs (no filtering here - Matcher will score them)
         stored_ids = self.store_jobs(jobs)
         logger.info(f"[ScoutAgent] Cycle complete: {len(stored_ids)} jobs stored.")
         self.update_status("idle")
 
-    # def run_periodically(self, interval_hours: int = 24):
-    #     """
-    #     Run the ScoutAgent in a scheduled loop.
-    #     Useful if you deploy it as a background service.
-    #     """
-    #     while True:
-    #         try:
-    #             self.run("data scientist", location="remote", max_results=50)
-    #             logger.info(f"[ScoutAgent] Sleeping for {interval_hours}h...")
-    #             sleep(interval_hours * 3600)
-    #         except KeyboardInterrupt:
-    #             logger.info("[ScoutAgent] Stopped manually.")
-    #             break
-    #         except Exception as e:
-    #             logger.error(f"[ScoutAgent] Error in scheduled run: {e}")
-    #             self._update_status("error")
-    #             sleep(60)
+    async def _handle_data_request(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle job search request from another agent.
+
+        Args:
+            payload: Request with 'keywords', 'date_posted', 'employment_type', 'max_results'
+
+        Returns:
+            Response with job_ids and count
+        """
+        try:
+            keywords = payload.get("keywords", "")
+            date_posted = payload.get("date_posted")
+            employment_type = payload.get("employment_type")
+            max_results = payload.get("max_results", 50)
+            api_source = payload.get("api_source", "jsearch")
+
+            if not keywords:
+                return {"status": "error", "error": "keywords required"}
+
+            logger.info(f"[ScoutAgent] Processing search request: {keywords}")
+
+            # Search and store jobs
+            jobs = self.search_jobs(
+                keywords, date_posted, employment_type, max_results, api_source
+            )
+            stored_ids = self.store_jobs(jobs) if jobs else []
+
+            return {
+                "status": "success",
+                "job_ids": stored_ids,
+                "count": len(stored_ids),
+            }
+        except Exception as e:
+            logger.error(f"[ScoutAgent] Error handling request: {e}")
+            return {"status": "error", "error": str(e)}
+
+    async def _handle_status_update(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle status update from orchestrator.
+
+        Args:
+            payload: Status update details
+
+        Returns:
+            Current agent status
+        """
+        return {"status": "acknowledged", "agent": "scout", "current_status": "idle"}

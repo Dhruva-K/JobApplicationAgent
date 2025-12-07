@@ -118,3 +118,53 @@ class Config:
             API configuration dictionary
         """
         return self.get(f"job_apis.{api_name}", {})
+
+    def get_autonomous_config(self) -> Dict[str, Any]:
+        """Get autonomous mode configuration."""
+        return {
+            "search_interval_hours": self.get("autonomous.search.interval_hours", 6),
+            "auto_apply_threshold": self.get("autonomous.auto_apply.min_score", 90),
+            "review_threshold": self.get("autonomous.review.min_score", 75),
+            "review_medium_matches": self.get("autonomous.review.enabled", True),
+            "max_applications_per_day": self.get(
+                "autonomous.auto_apply.max_per_day", 10
+            ),
+            "max_applications_per_hour": self.get(
+                "autonomous.auto_apply.max_per_hour", 3
+            ),
+            "enabled_platforms": self.get(
+                "autonomous.auto_apply.enabled_platforms",
+                ["linkedin", "greenhouse", "lever", "workday", "indeed", "generic"],
+            ),
+            "notify_on_application": self.get(
+                "autonomous.notifications.on_application", True
+            ),
+            "notify_on_error": self.get("autonomous.notifications.on_error", True),
+            "log_file": self.get("audit.logs.autonomous", "logs/autonomous.log"),
+            "log_level": self.get("audit.log_level", "INFO"),
+        }
+
+    @property
+    def neo4j_uri(self) -> str:
+        """Get Neo4j URI."""
+        return self.get("neo4j.uri", "bolt://localhost:7687")
+
+    @property
+    def neo4j_user(self) -> str:
+        """Get Neo4j user."""
+        return self.get("neo4j.user", "neo4j")
+
+    @property
+    def neo4j_password(self) -> str:
+        """Get Neo4j password."""
+        return self.get("neo4j.password", "password")
+
+    @property
+    def neo4j_database(self) -> str:
+        """Get Neo4j database name."""
+        return self.get("neo4j.database", "neo4j")
+
+    @property
+    def autonomous_config(self) -> Dict[str, Any]:
+        """Get autonomous configuration as property."""
+        return self.get_autonomous_config()

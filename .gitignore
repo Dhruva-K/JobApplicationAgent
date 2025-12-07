@@ -46,7 +46,16 @@ chroma_db/
 
 # Logs
 *.log
-logs/
+data/logs/
+
+# Outputs
+data/outputs/
+outputs/
+
+# Personal files
+*.docx
+*.pdf
+.agent_state.json
 
 # OS
 .DS_Store
@@ -62,4 +71,5 @@ extract_docx.ps1
 *.temp
 
 config.yaml
-
+Project_Report.tex
+.pytest_cache/

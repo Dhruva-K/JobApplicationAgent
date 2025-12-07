@@ -437,26 +437,34 @@ class GraphMemory:
                 query, user_id=user_id, job_id=job_id, application_id=application_id
             )
 
-    def update_application_status(self, application_id: str, status: ApplicationStatus):
+    def update_application_status(
+        self, application_id: str, status: ApplicationStatus
+    ) -> bool:
         """Update application status.
 
         Args:
             application_id: Application identifier
             status: New application status
+
+        Returns:
+            True if application was found and updated, False otherwise
         """
         query = f"""
         MATCH (a:{NodeType.APPLICATION} {{application_id: $application_id}})
         SET a.status = $status,
             a.updated_date = $updated_date
+        RETURN a.application_id as id, a.status as status
         """
 
         with self.driver.session(database=self.database) as session:
-            session.run(
+            result = session.run(
                 query,
                 application_id=application_id,
                 status=status.value,
                 updated_date=datetime.now().isoformat(),
             )
+            records = list(result)
+            return len(records) > 0  # Returns True if node was found and updated
 
     def get_user_applications(self, user_id: str) -> List[Dict[str, Any]]:
         """Get all applications for a user.
@@ -517,12 +525,12 @@ class GraphMemory:
             limit: Maximum number of results
 
         Returns:
-            List of job dictionaries with match scores
+            List of job dictionaries with match scores and insights
         """
         query = f"""
         MATCH (u:{NodeType.USER} {{user_id: $user_id}})-[r:{RelationshipType.MATCHES}]->(j:{NodeType.JOB})
         WHERE r.match_score >= $min_score
-        RETURN j as job, r.match_score as score
+        RETURN j as job, r.match_score as score, r.strengths as strengths, r.concerns as concerns, r.match_reason as reason
         ORDER BY r.match_score DESC
         LIMIT $limit
         """
@@ -532,7 +540,15 @@ class GraphMemory:
                 query, user_id=user_id, min_score=min_score, limit=limit
             )
             return [
-                {**dict(record["job"]), "match_score": record["score"]}
+                {
+                    **dict(record["job"]),
+                    "match_score": record["score"],
+                    "match_insights": {
+                        "strengths": record.get("strengths", []),
+                        "gaps": record.get("concerns", []),
+                        "reason": record.get("reason", ""),
+                    },
+                }
                 for record in result
             ]
 

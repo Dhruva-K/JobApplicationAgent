@@ -5,7 +5,8 @@ Profile Management CLI - View, edit, and manage user profiles.
 import sys
 from pathlib import Path
 
-project_root = Path(__file__).parent
+# Add parent directory to path
+project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 import logging
@@ -31,8 +32,9 @@ def display_menu():
     print("4. Add skill")
     print("5. Remove skill")
     print("6. Update preferences")
-    print("7. Delete profile")
-    print("8. Exit")
+    print("7. Upload/Update resume")
+    print("8. Delete profile")
+    print("9. Exit")
     print("=" * 60)
 
 
@@ -60,6 +62,10 @@ def view_profile(user_profile: UserProfile):
         print(f"  • {skill}")
 
     print(f"\nJob Search Preferences:")
+    preferred_roles = preferences.get("preferred_roles", [])
+    print(
+        f"  Preferred Roles: {', '.join(preferred_roles) if preferred_roles else 'Not set'}"
+    )
     print(f"  Employment Types: {', '.join(preferences.get('employment_types', []))}")
     print(f"  Remote Only: {preferences.get('remote_only', False)}")
     print(f"  Locations: {', '.join(preferences.get('locations', [])) or 'Any'}")
@@ -71,6 +77,14 @@ def view_profile(user_profile: UserProfile):
     print(
         f"  Excluded Companies: {', '.join(preferences.get('exclude_companies', [])) or 'None'}"
     )
+
+    # Show resume status
+    resume_text = user_profile.get_resume(user_id)
+    if resume_text:
+        print(f"\n📄 Resume: Uploaded ({len(resume_text)} characters)")
+        print(f"  Preview: {resume_text[:150]}...")
+    else:
+        print(f"\n📄 Resume: Not uploaded")
 
 
 def list_profiles(user_profile: UserProfile):
@@ -135,36 +149,42 @@ def update_preferences(user_profile: UserProfile):
         return
 
     print("\nWhat would you like to update?")
-    print("1. Employment types")
-    print("2. Remote preference")
-    print("3. Locations")
-    print("4. Minimum salary")
-    print("5. Excluded companies")
+    print("1. Preferred job titles/roles")
+    print("2. Employment types")
+    print("3. Remote preference")
+    print("4. Locations")
+    print("5. Minimum salary")
+    print("6. Excluded companies")
 
     choice = input("\nChoice: ").strip()
     updates = {}
 
     if choice == "1":
+        print("Enter job titles (comma-separated):")
+        print("Example: Software Engineer, Machine Learning Engineer, Data Scientist")
+        roles = input("Job titles: ").strip()
+        updates["preferred_roles"] = [r.strip() for r in roles.split(",") if r.strip()]
+    elif choice == "2":
         emp_types = input("Employment types (comma-separated): ").strip()
         updates["employment_types"] = [
             et.strip().upper() for et in emp_types.split(",")
         ]
-    elif choice == "2":
+    elif choice == "3":
         remote = input("Remote only? (y/n): ").strip().lower() == "y"
         updates["remote_only"] = remote
-    elif choice == "3":
+    elif choice == "4":
         locs = input("Locations (comma-separated): ").strip()
         updates["preferred_locations"] = [
             loc.strip() for loc in locs.split(",") if loc.strip()
         ]
-    elif choice == "4":
+    elif choice == "5":
         salary = input("Minimum salary: ").strip()
         updates["salary_min"] = (
             float(salary)
             if salary.replace(".", "").replace(",", "").isdigit()
             else None
         )
-    elif choice == "5":
+    elif choice == "6":
         companies = input("Excluded companies (comma-separated): ").strip()
         updates["exclude_companies"] = [
             c.strip() for c in companies.split(",") if c.strip()
@@ -198,11 +218,49 @@ def delete_profile(user_profile: UserProfile):
         print("Deletion cancelled")
 
 
+def upload_resume(user_profile: UserProfile):
+    """Upload or update resume for a profile."""
+    user_id = input("\nEnter user ID: ").strip()
+
+    profile = user_profile.get_profile(user_id)
+    if not profile:
+        print(f"❌ Profile '{user_id}' not found.")
+        return
+
+    # Check if resume exists
+    existing_resume = user_profile.get_resume(user_id)
+    if existing_resume:
+        print(f"\n⚠️  Resume already exists ({len(existing_resume)} characters)")
+        print(f"Preview: {existing_resume[:150]}...")
+        replace = input("\nReplace existing resume? (y/n): ").strip().lower()
+        if replace != "y":
+            print("Upload cancelled")
+            return
+
+    resume_path = input("\nEnter path to resume file (PDF or DOCX): ").strip()
+
+    if not resume_path:
+        print("❌ No file path provided")
+        return
+
+    print("\n⏳ Parsing resume...")
+    if user_profile.upload_resume(user_id, resume_path):
+        resume_text = user_profile.get_resume(user_id)
+        print(f"✅ Resume uploaded successfully!")
+        print(f"   Characters: {len(resume_text)}")
+        print(f"   Preview: {resume_text[:200]}...")
+    else:
+        print(
+            "❌ Failed to upload resume. Check file path and format (PDF or DOCX only)"
+        )
+
+
 def main():
     """Main CLI loop."""
     try:
         # Initialize
-        config = Config()
+        config_path = Path(__file__).parent.parent / "config.yaml"
+        config = Config(str(config_path))
         neo = config.get_neo4j_config()
         graph = GraphMemory(
             uri=neo["uri"],
@@ -230,8 +288,10 @@ def main():
             elif choice == "6":
                 update_preferences(user_profile)
             elif choice == "7":
-                delete_profile(user_profile)
+                upload_resume(user_profile)
             elif choice == "8":
+                delete_profile(user_profile)
+            elif choice == "9":
                 print("\n👋 Goodbye!")
                 break
             else:

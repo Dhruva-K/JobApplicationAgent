@@ -470,3 +470,130 @@ Return ONLY the tailored resume text, ready to use. No explanations or meta-comm
 """
 
         return prompt
+
+    def _save_document_to_file(
+        self, document: str, user_id: str, job_id: str, document_type: str
+    ) -> str:
+        """Save document to file and return the file path.
+
+        Args:
+            document: Document text to save
+            user_id: User identifier
+            job_id: Job identifier
+            document_type: Type of document ('cover_letter' or 'resume')
+
+        Returns:
+            File path where document was saved
+        """
+        try:
+            # Get job info for filename
+            job = self.graph_memory.get_job(job_id)
+            if not job:
+                # Fallback filename
+                job_title = "job"
+                company_name = "company"
+            else:
+                job_title = job.get("title", "job").replace("/", "-").replace("\\", "-")
+                company_name = (
+                    job.get("company_name", "company")
+                    .replace("/", "-")
+                    .replace("\\", "-")
+                )
+
+            # Create output directory
+            if document_type == "cover_letter":
+                output_dir = Path("outputs/cover_letters")
+            else:
+                output_dir = Path("outputs/resumes")
+
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            # Create filename with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            safe_job_title = job_title[:30]  # Limit length
+            safe_company = company_name[:30]
+            filename = f"{safe_company}_{safe_job_title}_{timestamp}.txt"
+
+            file_path = output_dir / filename
+
+            # Save document
+            file_path.write_text(document, encoding="utf-8")
+
+            logger.info(f"[WriterAgent] Saved {document_type} to {file_path}")
+            return str(file_path)
+
+        except Exception as e:
+            logger.error(f"[WriterAgent] Error saving document: {e}")
+            # Return a fallback path
+            return f"outputs/{document_type}_{job_id}.txt"
+
+    async def _handle_data_request(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle document generation request from another agent.
+
+        Args:
+            payload: Request with 'user_id', 'job_id', and 'document_type'
+
+        Returns:
+            Response with generated document
+        """
+        try:
+            user_id = payload.get("user_id")
+            job_id = payload.get("job_id")
+            document_type = payload.get("document_type", "cover_letter")  # or 'resume'
+            match_insights = payload.get("match_insights")
+
+            if not user_id or not job_id:
+                return {"status": "error", "error": "user_id and job_id required"}
+
+            logger.info(f"[WriterAgent] Generating {document_type} for job {job_id}")
+
+            if document_type == "cover_letter":
+                document = self.generate_cover_letter(user_id, job_id, match_insights)
+            elif document_type == "resume":
+                document = self.generate_tailored_resume(
+                    user_id, job_id, match_insights
+                )
+            else:
+                return {
+                    "status": "error",
+                    "error": f"Unknown document type: {document_type}",
+                }
+
+            if not document:
+                return {
+                    "status": "error",
+                    "error": f"Failed to generate {document_type}",
+                }
+
+            # Save document to file
+            file_path = self._save_document_to_file(
+                document=document,
+                user_id=user_id,
+                job_id=job_id,
+                document_type=document_type,
+            )
+
+            return {
+                "status": "success",
+                "document_type": document_type,
+                "document": document,
+                "file_path": file_path,
+            }
+        except Exception as e:
+            logger.error(f"[WriterAgent] Error handling request: {e}")
+            return {"status": "error", "error": str(e)}
+
+    async def _handle_status_update(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle status update from orchestrator.
+
+        Args:
+            payload: Status update details
+
+        Returns:
+            Current agent status
+        """
+        return {
+            "status": "acknowledged",
+            "agent": "writer",
+            "llm_provider": self.llm_client.provider,
+        }

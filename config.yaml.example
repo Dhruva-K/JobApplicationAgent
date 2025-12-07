@@ -1,0 +1,135 @@
+# Job Application Agent Configuration
+# Copy this file to config.yaml and update with your credentials
+
+neo4j:
+  uri: neo4j://127.0.0.1:7687  # Neo4j connection URI
+  user: neo4j                   # Neo4j username
+  password: your_password_here  # Neo4j password
+  database: jobAgent            # Database name
+
+llm:
+  provider: groq  # Options: groq, openai, ollama
+  model_name: meta-llama/llama-4-scout-17b-16e-instruct  # LLM model to use
+  api_key: your_groq_api_key_here  # API key for LLM provider
+  base_url: http://localhost:11434  # For Ollama (local LLM)
+  temperature: 0.3              # LLM temperature (0.0-1.0)
+  max_tokens: 1024              # Maximum tokens per response
+  timeout: 60                   # Request timeout in seconds
+
+embeddings:
+  model: sentence-transformers/all-MiniLM-L6-v2  # Embedding model
+  device: cpu                   # Device: cpu or cuda
+
+job_apis:
+  jsearch:
+    api_key: your_jsearch_api_key_here  # Get from: https://rapidapi.com/jsearch
+    base_url: https://api.openwebninja.com/jsearch
+  remotive:
+    api_key: ''                 # Optional: Remotive API key
+    base_url: https://remotive.com/api
+
+vector_store:
+  provider: chromadb            # Vector store provider
+  persist_directory: ./chroma_db  # Local storage directory
+
+app:
+  max_jobs_per_search: 10       # Maximum jobs to fetch per search
+  match_threshold: 0.6          # Minimum match score (0.0-1.0)
+  enable_caching: true          # Enable result caching
+  cache_ttl_hours: 24           # Cache time-to-live in hours
+  user_id: your_user_id         # Set by setup_profile.py
+
+autonomous:
+  enabled: true                 # Enable autonomous mode
+  search:
+    interval_hours: 3           # Search interval (hours)
+    max_jobs_per_cycle: 5       # Max jobs per search cycle
+    platforms:                  # Job platforms to search
+      - linkedin
+      - greenhouse
+      - lever
+      - workday
+      - indeed
+  
+  auto_apply:
+    enabled: true               # Enable auto-apply
+    min_score: 90               # Minimum score for auto-apply (75-100)
+    max_per_day: 5              # Daily application limit
+    max_per_hour: 3             # Hourly application limit
+    max_per_week: 50            # Weekly application limit
+    enabled_platforms:          # Platforms to auto-apply
+      - linkedin
+      - greenhouse
+      - lever
+      - workday
+      - indeed
+      - generic
+    daily_reset_hour: 0         # Hour to reset daily counter (0-23)
+  
+  review:
+    enabled: true               # Enable human review for medium matches
+    min_score: 75               # Minimum score for review
+    max_score: 89               # Maximum score for review
+    timeout_minutes: 30         # Review timeout
+    timeout_action: skip        # Action on timeout: skip or auto_apply
+  
+  rate_limiting:
+    groq:
+      requests_per_minute: 30
+      tokens_per_minute: 12000
+      tokens_per_day: 100000
+    openai:
+      requests_per_minute: 60
+      tokens_per_minute: 90000
+    together:
+      requests_per_minute: 60
+      tokens_per_minute: 60000
+    extraction_delay_seconds: 3  # Delay between extractions
+    scoring_delay_seconds: 3     # Delay between scoring operations
+    max_retries: 3               # Maximum retry attempts
+    retry_backoff_seconds: 5     # Retry backoff time
+  
+  notifications:
+    enabled: true               # Enable notifications
+    on_application: true        # Notify on successful application
+    on_error: true              # Notify on errors
+    on_rate_limit: true         # Notify on rate limit hit
+    on_daily_cap: true          # Notify when daily cap reached
+  
+  state:
+    file: outputs/autonomous_state.json  # State persistence file
+    save_interval_minutes: 5    # State save interval
+
+audit:
+  enabled: true                 # Enable audit logging
+  logs:
+    autonomous: logs/autonomous.log
+    applications: logs/applications.log
+    documents: logs/documents.log
+    decisions: logs/decisions.log
+    errors: logs/errors.log
+    rate_limits: logs/rate_limits.log
+  log_level: INFO               # Logging level: DEBUG, INFO, WARNING, ERROR
+  format: '%(asctime)s | %(name)s | %(levelname)s | %(message)s'
+  date_format: '%Y-%m-%d %H:%M:%S'
+  retention:
+    days: 90                    # Log retention period
+    max_size_mb: 100            # Max log file size
+    backup_count: 10            # Number of backup files
+  log_events:
+    job_searches: true
+    extractions: true
+    scoring: true
+    documents: true
+    applications: true
+    decisions: true
+    rate_limits: true
+    errors: true
+  include_sensitive: false      # Include sensitive data in logs (not recommended)
+
+application:
+  use_automation: false         # Use browser automation for applications
+  mock_applications: true       # Mock applications (for testing)
+  headless_browser: true        # Run browser in headless mode
+  screenshot_dir: outputs/screenshots  # Screenshot storage directory
+

@@ -33,13 +33,13 @@ class LLMClient:
             f"[LLMClient] Initialized with provider={self.provider}, model={self.model_name}"
         )
 
-    def generate(self, prompt: str, retries: int = 2) -> Optional[str]:
+    def generate(self, prompt: str, retries: int = 3) -> Optional[str]:
         """
         Generate text from prompt using configured provider.
 
         Args:
             prompt: Input prompt
-            retries: Number of retry attempts
+            retries: Number of retry attempts (default 3 for better rate limit handling)
 
         Returns:
             Generated text or None if failed
@@ -55,6 +55,50 @@ class LLMClient:
         else:
             logger.error(f"[LLMClient] Unknown provider: {self.provider}")
             return None
+
+    def generate_json(self, prompt: str, retries: int = 3) -> Dict[str, Any]:
+        """
+        Generate and parse JSON response from prompt.
+
+        Args:
+            prompt: Input prompt (should request JSON output)
+            retries: Number of retry attempts (default 3 for better rate limit handling)
+
+        Returns:
+            Parsed JSON dictionary
+        """
+        import json
+
+        response = self.generate(prompt, retries)
+
+        if not response:
+            return {"error": "Failed to generate response"}
+
+        # Try to extract JSON from response
+        try:
+            # Look for JSON in the response
+            response = response.strip()
+
+            # Try to find JSON object/array
+            start_idx = response.find("{")
+            if start_idx == -1:
+                start_idx = response.find("[")
+
+            if start_idx != -1:
+                end_idx = response.rfind("}") + 1
+                if end_idx == 0:
+                    end_idx = response.rfind("]") + 1
+                if end_idx > start_idx:
+                    json_str = response[start_idx:end_idx]
+                    return json.loads(json_str)
+
+            # If no JSON found, try parsing entire response
+            return json.loads(response)
+        except json.JSONDecodeError as e:
+            logger.warning(f"Failed to parse JSON from response: {e}")
+            logger.debug(f"Response was: {response[:200]}")
+            # Return a fallback structure
+            return {"error": "Failed to parse JSON", "raw_response": response}
 
     def _generate_ollama(self, prompt: str, retries: int) -> Optional[str]:
         """Generate using local Ollama."""

@@ -115,7 +115,7 @@ class MatcherAgent(BaseAgent):
                 f"[MatcherAgent] Processing batch {i//batch_size + 1}/{(len(jobs)-1)//batch_size + 1}"
             )
 
-            for job in batch:
+            for job_idx, job in enumerate(batch):
                 job_id = job.get("job_id")
                 if not job_id:
                     continue
@@ -144,6 +144,15 @@ class MatcherAgent(BaseAgent):
                     else:
                         failed_count += 1
                         logger.warning(f"[MatcherAgent] Failed to score job {job_id}")
+
+                    # Add delay between scoring to avoid rate limits (6s for free tier)
+                    if job_idx < len(batch) - 1 or i + batch_size < len(jobs):
+                        import time
+
+                        logger.info(
+                            f"[MatcherAgent] Waiting 6s before next scoring (free tier rate limiting)..."
+                        )
+                        time.sleep(6.0)
 
                 except Exception as e:
                     failed_count += 1
@@ -387,7 +396,7 @@ JSON Response:"""
         query = """
         MATCH (u:User {user_id: $user_id})
         MATCH (j:Job {job_id: $job_id})
-        MERGE (u)-[m:MATCHED]->(j)
+        MERGE (u)-[m:MATCHES]->(j)
         SET m.match_score = $score,
             m.match_reason = $reason,
             m.strengths = $strengths,
@@ -484,3 +493,44 @@ JSON Response:"""
         logger.info(f"  - Average Score: {result.get('average_score', 0):.1f}/100")
 
         return result
+
+    async def _handle_data_request(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle job scoring request from another agent.
+
+        Args:
+            payload: Request with 'user_id' and optional 'job_ids'
+
+        Returns:
+            Response with scoring results
+        """
+        try:
+            user_id = payload.get("user_id")
+            job_ids = payload.get("job_ids")
+            batch_size = payload.get("batch_size", 10)
+
+            if not user_id:
+                return {"status": "error", "error": "user_id required"}
+
+            logger.info(f"[MatcherAgent] Processing scoring request for {user_id}")
+
+            results = self.score_all_jobs(user_id, job_ids, batch_size)
+
+            return {"status": "success", "results": results}
+        except Exception as e:
+            logger.error(f"[MatcherAgent] Error handling request: {e}")
+            return {"status": "error", "error": str(e)}
+
+    async def _handle_status_update(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle status update from orchestrator.
+
+        Args:
+            payload: Status update details
+
+        Returns:
+            Current agent status
+        """
+        return {
+            "status": "acknowledged",
+            "agent": "matcher",
+            "llm_provider": self.llm_client.provider,
+        }
