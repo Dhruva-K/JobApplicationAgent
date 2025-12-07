@@ -45,7 +45,7 @@ Job Application Agent is a sophisticated AI-powered system that revolutionizes j
 - Visual exploration of your job search network
 
 ### 🔧 **Technology Stack**
-- **LLM**: Llama 3 8B (local), Groq API, or OpenAI (configurable)
+- **LLM**: meta-llama/llama-4-scout-17b-16e-instruct (Groq API)
 - **Orchestration**: LangGraph for stateful agent workflows
 - **Database**: Neo4j for graph-based memory
 - **Embeddings**: Sentence Transformers for semantic search
